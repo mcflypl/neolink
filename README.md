@@ -81,7 +81,7 @@ Then create a config file as described below.
 
 Docker images of this fork are published to the GitHub Container Registry as
 `ghcr.io/mcflypl/neolink` for `linux/amd64`, `linux/arm/v7`, `linux/arm64` and
-`linux/386`. `latest` tracks master, every branch gets its own tag and every
+`linux/386`. `latest` tracks `main`, every branch gets its own tag and every
 release tag (e.g. `v0.7.0`) is published as `0.7.0`.
 
 ```bash
