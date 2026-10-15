@@ -2,7 +2,7 @@ use super::BcConnection;
 use crate::bcmedia::codex::BcMediaCodex;
 use crate::{bc::model::*, bcmedia::model::*, Error, Result};
 use futures::stream::{Stream, TryStreamExt};
-use std::io::{Error as IoError, ErrorKind, Result as IoResult};
+use std::io::{Error as IoError, Result as IoResult};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::sync::mpsc::Receiver;
@@ -87,7 +87,7 @@ impl<'a> BcSubscription<'a> {
                     }),
             }) => Some(Ok(data)),
             Ok(_) => None,
-            Err(e) => Some(Err(IoError::new(ErrorKind::Other, e))),
+            Err(e) => Some(Err(IoError::other(e))),
         })
     }
 

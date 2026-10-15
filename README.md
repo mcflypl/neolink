@@ -494,9 +494,9 @@ You can make neolink stop active streams when there are no rtsp clients using
 Once in the disconnected state neolink will stay disconnected until there is a
 new requested activation such as a client connecting or an mqtt command.
 
-Push notifications can no longer wake neolink up, because Google removed the
-API they relied on. Set `push_notifications = false` in the `[[cameras]]`
-section to stop neolink from trying and logging the failures.
+Push notification support was removed in 0.8.0, because Google shut down the
+API it relied on. The `push_notifications` option is still accepted so older
+configs keep loading, but it has no effect.
 
 ### Image
 

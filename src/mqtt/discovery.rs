@@ -272,10 +272,7 @@ pub(crate) async fn enable_discovery(
 
                 // Each feature needs to be individually registered
                 mqtt.send_message_with_root_topic(
-                    &format!(
-                        "{}/light/{}",
-                        discovery_config.topic, &config_data.unique_id
-                    ),
+                    &format!("{}/light/{}", discovery_config.topic, config_data.unique_id),
                     "config",
                     &serde_json::to_string(&config_data)
                         .with_context(|| "Cound not serialise discovery light config into json")?,
@@ -319,7 +316,7 @@ pub(crate) async fn enable_discovery(
                 mqtt.send_message_with_root_topic(
                     &format!(
                         "{}/switch/{}",
-                        discovery_config.topic, &config_data.unique_id
+                        discovery_config.topic, config_data.unique_id
                     ),
                     "config",
                     &serde_json::to_string(&config_data)
@@ -354,7 +351,7 @@ pub(crate) async fn enable_discovery(
                 mqtt.send_message_with_root_topic(
                     &format!(
                         "{}/camera/{}",
-                        discovery_config.topic, &config_data.unique_id
+                        discovery_config.topic, config_data.unique_id
                     ),
                     "config",
                     &serde_json::to_string(&config_data)
@@ -393,7 +390,7 @@ pub(crate) async fn enable_discovery(
                 mqtt.send_message_with_root_topic(
                     &format!(
                         "{}/switch/{}",
-                        discovery_config.topic, &config_data.unique_id
+                        discovery_config.topic, config_data.unique_id
                     ),
                     "config",
                     &serde_json::to_string(&config_data)
@@ -429,7 +426,7 @@ pub(crate) async fn enable_discovery(
                 mqtt.send_message_with_root_topic(
                     &format!(
                         "{}/select/{}",
-                        discovery_config.topic, &config_data.unique_id
+                        discovery_config.topic, config_data.unique_id
                     ),
                     "config",
                     &serde_json::to_string(&config_data)
@@ -465,7 +462,7 @@ pub(crate) async fn enable_discovery(
                 mqtt.send_message_with_root_topic(
                     &format!(
                         "{}/binary_sensor/{}",
-                        discovery_config.topic, &config_data.unique_id
+                        discovery_config.topic, config_data.unique_id
                     ),
                     "config",
                     &serde_json::to_string(&config_data)
@@ -500,7 +497,7 @@ pub(crate) async fn enable_discovery(
                 mqtt.send_message_with_root_topic(
                     &format!(
                         "{}/button/{}",
-                        discovery_config.topic, &config_data.unique_id
+                        discovery_config.topic, config_data.unique_id
                     ),
                     "config",
                     &serde_json::to_string(&config_data)
@@ -536,7 +533,7 @@ pub(crate) async fn enable_discovery(
                     mqtt.send_message_with_root_topic(
                         &format!(
                             "{}/button/{}",
-                            discovery_config.topic, &config_data.unique_id
+                            discovery_config.topic, config_data.unique_id
                         ),
                         "config",
                         &serde_json::to_string(&config_data)
@@ -573,7 +570,7 @@ pub(crate) async fn enable_discovery(
                 mqtt.send_message_with_root_topic(
                     &format!(
                         "{}/sensor/{}",
-                        discovery_config.topic, &config_data.unique_id
+                        discovery_config.topic, config_data.unique_id
                     ),
                     "config",
                     &serde_json::to_string(&config_data).with_context(|| {
@@ -609,7 +606,7 @@ pub(crate) async fn enable_discovery(
                 mqtt.send_message_with_root_topic(
                     &format!(
                         "{}/button/{}",
-                        discovery_config.topic, &config_data.unique_id
+                        discovery_config.topic, config_data.unique_id
                     ),
                     "config",
                     &serde_json::to_string(&config_data)

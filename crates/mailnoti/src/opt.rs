@@ -7,7 +7,7 @@ use std::str::FromStr;
 /// Neolink is free software released under the GNU AGPL v3.
 /// You can find its source code at https://github.com/thirtythreeforty/neolink
 #[derive(Parser, Debug)]
-#[command(name = "pushnoti", arg_required_else_help = true, version = crate_version!(), author = crate_authors!("\n"))]
+#[command(name = "mailnoti", arg_required_else_help = true, version = crate_version!(), author = crate_authors!("\n"))]
 pub struct Opt {
     #[arg(short, long, value_parser = PathBuf::from_str)]
     pub config: Option<PathBuf>,

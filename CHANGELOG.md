@@ -11,6 +11,31 @@ their history lives in that repository.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-15
+
+### Changed
+
+- All dependencies upgraded to their latest major versions, among them the
+  GStreamer bindings 0.25, nom 8, quick-xml 0.42, aes and cfb-mode 0.9, rand
+  0.10, rumqttc 0.25, toml 1, thiserror 2 and validator 0.21. Tested against a
+  Reolink Go PT Ultra: login through the relay, streaming, PTZ and battery.
+- The AES cipher is created for each message from the stored key, as cfb-mode
+  0.9 no longer allows cloning it; the encrypted bytes are unchanged.
+
+### Fixed
+
+- RUSTSEC-2026-0194: quick-xml could spend quadratic time on start tags with
+  many attributes.
+- The `mailnoti` tool reported itself as `pushnoti`.
+- Compiler and Clippy warnings.
+
+### Removed
+
+- Push notification support (the `pushnoti` feature and tool), because Google
+  shut down the API it relied on. The `push_notifications` option is still
+  accepted and ignored, and MQTT no longer publishes `status/notification`.
+- Unused `async-std` dependency of `mailnoti`.
+
 ## [0.7.0] - 2026-10-15
 
 First release of this fork, based on upstream commit `6e05e78` (`0.6.3-rc.3`).
@@ -61,5 +86,6 @@ First release of this fork, based on upstream commit `6e05e78` (`0.6.3-rc.3`).
 - Donation links and `FUNDING.yml`.
 - markdownlint pre-commit hook and its configuration.
 
-[Unreleased]: https://github.com/mcflypl/neolink/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/mcflypl/neolink/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/mcflypl/neolink/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mcflypl/neolink/compare/6e05e78...v0.7.0

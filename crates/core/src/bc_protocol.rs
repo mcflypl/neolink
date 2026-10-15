@@ -162,7 +162,7 @@ impl BcCamera {
                 for socket in sockets.drain(..) {
                     let channel_id: u8 = options.channel_id;
                     if let Ok(addr) = discovery.check_tcp(socket, channel_id).await.map(|_| {
-                        info!("{}: TCP Discovery success at {:?}", options.name, &socket);
+                        info!("{}: TCP Discovery success at {:?}", options.name, socket);
                         socket
                     }) {
                         return Ok(CameraLocation::Tcp(addr));

@@ -1,36 +1,37 @@
 [package]
 name = "neolink_core"
 description = "Core services and structure for Reolink IP cameras"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["George Hilliard <thirtythreeforty@gmail.com>", "Andrew King <sheepchaan@gmail.com>"]
 edition = "2018"
 license = "AGPL-3.0-or-later"
 
 [dependencies]
-aes = "0.8.2"
-bytes = "1.4.0"
-cfb-mode = "0.8.2"
-cookie-factory = "0.3.2"
-crc32fast = "1.3.2"
-crossbeam-channel = "0.5.8"
-delegate = "0.12.0"
-futures = "0.3.28"
+aes = "0.9.3"
+bytes = "1.12.1"
+cfb-mode = "0.9.1"
+cookie-factory = "0.3.3"
+crc32fast = "1.5.2"
+crossbeam-channel = "0.5.17"
+delegate = "0.13.5"
+futures = "0.3.34"
 get_if_addrs = "0.5.3"
-lazy_static = "1.4.0"
-log = "0.4.17"
-md5 = "0.7.0"
-nom = { version = "7.1.3", features = ["alloc"] }
-quick-xml = { version = "0.36.0", features = ["serialize"] }
-rand = "0.8.5"
-regex = "1.7.3"
-serde = { version = "1.0.106", features = ["derive"] }
-thiserror = "1.0.58"
-time = { version = "0.3.36" , features = [ "macros", "parsing", "local-offset" ]}
-tokio = { version = "1.27.0", features = ["full"] }
-tokio-stream = { version = "0.1.12", features = ["sync", "time", "net"] }
-tokio-util = { version = "0.7.7", features = ["full", "tracing"] }
+lazy_static = "1.5.1"
+log = "0.4.34"
+md5 = "0.8.1"
+nom = { version = "8.0.0", features = ["alloc"] }
+nom-language = "0.1.0"
+quick-xml = { version = "0.42.0", features = ["serialize"] }
+rand = "0.10.3"
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror = "2.0.21"
+time = { version = "0.3.55" , features = [ "macros", "parsing", "local-offset" ]}
+tokio = { version = "1.53.3", features = ["full"] }
+tokio-stream = { version = "0.1.19", features = ["sync", "time", "net"] }
+tokio-util = { version = "0.7.20", features = ["full", "tracing"] }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
 env_logger = "*"
-indoc = "2.0.1"
+indoc = "2.0.8"

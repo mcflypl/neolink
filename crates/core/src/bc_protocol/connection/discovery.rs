@@ -15,7 +15,7 @@ use futures::{
 };
 use lazy_static::lazy_static;
 use log::*;
-use rand::{seq::SliceRandom, thread_rng, Rng};
+use rand::{seq::SliceRandom, RngExt};
 use std::collections::{btree_map::Entry, BTreeMap, HashSet};
 use std::convert::TryInto;
 use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs};
@@ -164,7 +164,7 @@ impl Discoverer {
                             Some(Err(e)) => {
                                 log::error!("Error on discovery socket: {:?}", e);
                                 let mut locked_sub = thread_subscriber.write().await;
-                                for (_, sub) in locked_sub.iter() {
+                                for sub in locked_sub.values() {
                                     let _ = sub.send(Err(e.clone())).await;
                                 }
                                 locked_sub.clear();
@@ -650,7 +650,7 @@ impl Discoverer {
             .map_err(|_| Error::Other("Discovery already complete"))?;
         // Send and await confirm
         self.retry_send(msg, addr, |bc, _| {
-            trace!("msg: {:?}", &bc);
+            trace!("msg: {:?}", bc);
             match bc {
                 UdpDiscovery {
                     tid: _,
@@ -761,7 +761,7 @@ impl Discoverer {
             .map_err(|_| Error::Other("Discovery already complete"))?;
         // Send and await confirm
         self.retry_send(msg, addr, |bc, _| {
-            trace!("msg: {:?}", &bc);
+            trace!("msg: {:?}", bc);
             match bc {
                 UdpDiscovery {
                     tid: _,
@@ -1264,19 +1264,19 @@ fn get_broadcasts(ports: &[u16]) -> Result<Vec<SocketAddr>> {
 }
 
 fn generate_tid() -> u32 {
-    let mut rng = thread_rng();
-    (rng.gen::<u8>()) as u32
+    let mut rng = rand::rng();
+    (rng.random::<u8>()) as u32
 }
 
 fn generate_cid() -> i32 {
-    let mut rng = thread_rng();
-    rng.gen()
+    let mut rng = rand::rng();
+    rng.random()
 }
 
 async fn connect() -> Result<UdpSocket> {
     let mut ports: Vec<u16> = (53500..54000).collect();
     {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         ports.shuffle(&mut rng);
     }
 

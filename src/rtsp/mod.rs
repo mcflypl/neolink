@@ -197,7 +197,7 @@ pub(crate) async fn main(_opt: Opt, reactor: NeoReactor) -> Result<()> {
     let rtsp_config = reactor.config().await?.borrow().clone();
     info!(
         "Starting RTSP Server at {}:{}",
-        &rtsp_config.bind_addr, rtsp_config.bind_port,
+        rtsp_config.bind_addr, rtsp_config.bind_port,
     );
 
     let bind_addr = rtsp_config.bind_addr.clone();

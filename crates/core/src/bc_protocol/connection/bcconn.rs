@@ -113,7 +113,7 @@ impl BcConnection {
         Ok(())
     }
 
-    pub async fn subscribe(&self, msg_id: u32, msg_num: u16) -> Result<BcSubscription> {
+    pub async fn subscribe(&self, msg_id: u32, msg_num: u16) -> Result<BcSubscription<'_>> {
         let (tx, rx) = channel(100);
         self.poll_commander
             .send(PollCommand::AddSubscriber(msg_id, Some(msg_num), tx))
@@ -150,7 +150,7 @@ impl BcConnection {
     /// The command Snap that grabs a jpeg payload is an example of this
     ///
     /// This function creates a temporary handle to grab this single message
-    pub async fn subscribe_to_id(&self, msg_id: u32) -> Result<BcSubscription> {
+    pub async fn subscribe_to_id(&self, msg_id: u32) -> Result<BcSubscription<'_>> {
         let (tx, rx) = channel(100);
         self.poll_commander
             .send(PollCommand::AddSubscriber(msg_id, None, tx))
@@ -315,16 +315,16 @@ impl Poller {
                                                 "Remaining: {} of {} message space for {} (ID: {})",
                                                 sender.capacity(),
                                                 sender.max_capacity(),
-                                                &msg_num,
-                                                &msg_id
+                                                msg_num,
+                                                msg_id
                                             );
                                         } else {
                                             trace!(
                                                 "Remaining: {} of {} message space for {} (ID: {})",
                                                 sender.capacity(),
                                                 sender.max_capacity(),
-                                                &msg_num,
-                                                &msg_id
+                                                msg_num,
+                                                msg_id
                                             );
                                         }
                                         let _ = sender.send(Ok(response)).await;
