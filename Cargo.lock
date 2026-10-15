@@ -1770,7 +1770,7 @@ dependencies = [
 
 [[package]]
 name = "mailnoti"
-version = "0.6.3-rc.3"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "async-std",
@@ -1866,7 +1866,7 @@ dependencies = [
 
 [[package]]
 name = "neolink"
-version = "0.6.3-rc.3"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "base64 0.22.0",
@@ -1903,7 +1903,7 @@ dependencies = [
 
 [[package]]
 name = "neolink_core"
-version = "0.6.3-rc.3"
+version = "0.7.0"
 dependencies = [
  "aes",
  "assert_matches",
@@ -1934,7 +1934,7 @@ dependencies = [
 
 [[package]]
 name = "neolink_decoder"
-version = "0.6.3-rc.3"
+version = "0.7.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -2315,7 +2315,7 @@ dependencies = [
 
 [[package]]
 name = "pushnoti"
-version = "0.6.3-rc.3"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap",

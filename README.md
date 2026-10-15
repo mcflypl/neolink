@@ -1,7 +1,21 @@
 # Neolink
 
-![CI](https://github.com/QuantumEntangledAndy/neolink/workflows/CI/badge.svg)
-[![dependency status](https://deps.rs/repo/github/QuantumEntangledAndy/neolink/status.svg)](https://deps.rs/repo/github/QuantumEntangledAndy/neolink)
+![CI](https://github.com/mcflypl/neolink/workflows/CI/badge.svg)
+[![dependency status](https://deps.rs/repo/github/mcflypl/neolink/status.svg)](https://deps.rs/repo/github/mcflypl/neolink)
+
+> **This is a maintenance fork** of
+> [QuantumEntangledAndy/neolink](https://github.com/QuantumEntangledAndy/neolink),
+> whose development stopped in January 2025 (last commit `6e05e78`,
+> version `0.6.3-rc.3`). It keeps Neolink working with current cameras and fixes
+> bugs found in daily use; see [CHANGELOG.md](CHANGELOG.md) for everything that
+> differs from upstream.
+>
+> Fixed so far:
+>
+> - The RTSP server no longer freezes for good when a camera stops answering
+>   while a client is connecting (seen with 4G cameras such as the Reolink
+>   Go PT Ultra over the Reolink relay). Client setup is now bounded by a 30 s
+>   timeout and the failure is logged.
 
 Neolink is a small program that acts as a proxy between Reolink IP cameras and
 normal RTSP clients.
@@ -17,11 +31,11 @@ camera.
 The Neolink project is not affiliated with Reolink in any way; everything it
 does has been reverse engineered.
 
-## This Fork
+## Fork History
 
-This fork is an extension of
-[thirtythreeforty's](https://github.com/thirtythreeforty/neolink) with additional
-features not yet in upstream master.
+The upstream QuantumEntangledAndy/neolink is itself an extension of
+[thirtythreeforty's](https://github.com/thirtythreeforty/neolink) original with
+additional features.
 
 **Major Features**:
 
@@ -42,7 +56,7 @@ features not yet in upstream master.
 ## Installation
 
 Download from the
-[release page](https://github.com/QuantumEntangledAndy/neolink/releases)
+[release page](https://github.com/mcflypl/neolink/releases)
 
 Extract the zip
 
@@ -477,12 +491,13 @@ sent by the camera on motion or PIR alarms. To disable this you can set
 
 ### Docker
 
-[Docker](https://hub.docker.com/r/quantumentangledandy/neolink) builds are also
-provided in multiple architectures. The latest tag tracks master while each
-branch gets it's own tag.
+Docker images of this fork are published to the GitHub Container Registry as
+`ghcr.io/mcflypl/neolink` for `linux/amd64`, `linux/arm/v7`, `linux/arm64` and
+`linux/386`. `latest` tracks master, every branch gets its own tag and every
+release tag (e.g. `v0.7.0`) is published as `0.7.0`.
 
 ```bash
-docker pull quantumentangledandy/neolink
+docker pull ghcr.io/mcflypl/neolink
 
 # Add `-e "RUST_LOG=debug"` to run with debug logs
 #
@@ -491,7 +506,7 @@ docker pull quantumentangledandy/neolink
 # method then normal bridge mode should work fine
 # and you can ommit this option. Not all OSes support
 # network=host, notably macos lacks this option.
-docker run --network host --volume=$PWD/config.toml:/etc/neolink.toml quantumentangledandy/neolink
+docker run --network host --volume=$PWD/config.toml:/etc/neolink.toml ghcr.io/mcflypl/neolink
 ```
 
 #### Environmental Variables
@@ -614,8 +629,5 @@ v3.
 This means that if you incorporate it into a piece of software available over
 the network, you must offer that software's source code to your users.
 
-## Donations
-
-If you find this code helpful please consider supporting development.
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/G2G5HOYIZ)
+See [LICENSE.md](LICENSE.md) for the copyright notices and [LICENSE](LICENSE) for
+the full license text.

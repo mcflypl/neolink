@@ -31,9 +31,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-2022, macos-12, macos-14] # macos-14+ is arm64
+        os: [ubuntu-24.04, windows-2025, macos-15] # macos-15 is arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         name: Checkout onto ${{ runner.os }}
       - if: runner.os == 'Linux'
         name: apt install linux deps
@@ -97,18 +97,18 @@ jobs:
           echo "OPENSSL_INCLUDE_DIR=$(brew --prefix openssl@1.1)/include/" >>  "${GITHUB_ENV}"
           echo "OPENSSL_LIB_DIR=$(brew --prefix openssl@1.1)/lib/" >>  "${GITHUB_ENV}"
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache cargo index
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache cargo build
         if: runner.os != 'macOS' # Random missing crates on macOS, unclear why
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
@@ -121,7 +121,7 @@ jobs:
           # pkg-config --variable pc_path pkg-config
           export JEMALLOC_SYS_WITH_LG_PAGE=16
           cargo  build --release --all-features
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.os }}
           path: "target/release/neolink*"
@@ -156,7 +156,7 @@ jobs:
             # on i686, the pkgconfig path doesn't match the prefix!
             pkgconfig: i386-linux-gnu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install basic tools
         run: |
           apt-get update
@@ -194,7 +194,7 @@ jobs:
           PKG_CONFIG_LIBDIR: /usr/lib/${{ matrix.pkgconfig }}/pkgconfig
           TARGET: ${{ matrix.target }}
           JEMALLOC_SYS_WITH_LG_PAGE: 16
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.arch }}-bookworm
           path: "target/${{ matrix.target }}/release/neolink*"
@@ -203,138 +203,71 @@ jobs:
     name: Build Docker image
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     needs:
       - "cross"
     steps:
-      - name: Check token is set
-        id: vars
-        shell: bash
-        run: |
-          unset HAS_SECRET
-          if [ -n $SECRET ]; then HAS_SECRET='true' ; fi
-          echo "HAS_SECRET_TOKEN=${HAS_SECRET}" >> $GITHUB_OUTPUT
-        env:
-          SECRET: "${{ secrets.DOCKER_TOKEN }}"
       - name: Check out the repo
-        uses: actions/checkout@v4
-        if: ${{ steps.vars.outputs.HAS_SECRET_TOKEN }}
-      - name: Convert username to lower case for docker
-        id: string_user
-        uses: ASzc/change-string-case-action@v6
-        with:
-          string: ${{ github.repository_owner }}
-      - name: Convert repo to lower case for docker
-        id: string_repo
-        uses: ASzc/change-string-case-action@v6
-        with:
-          string: ${{ github.repository }}
+        uses: actions/checkout@v7
       - name: Set up QEMU
-        if: ${{ steps.vars.outputs.HAS_SECRET_TOKEN }}
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
-        if: ${{ steps.vars.outputs.HAS_SECRET_TOKEN }}
-        uses: docker/setup-buildx-action@v3
-      - name: Login to Docker Hub
-        if: ${{ steps.vars.outputs.HAS_SECRET_TOKEN }}
-        uses: docker/login-action@v3
+        uses: docker/setup-buildx-action@v4
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
         with:
-          registry: docker.io
-          username: ${{ vars.DOCKER_USERNAME || steps.string_user.outputs.lowercase }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-      - name: Set Docker name with owner (package name) depending on if DOCKER_USERNAME is set
-        if: ${{ steps.vars.outputs.HAS_SECRET_TOKEN }}
-        id: docker_repo
-        shell: bash
-        run: |
-          if [ -z $DOCKER_USERNAME ]; then
-            echo "DOCKER_NWO=${GITHUB_NWO}" >> $GITHUB_OUTPUT
-          else
-            IFS='/' read -ra NWO_SPLIT <<< "$GITHUB_NWO"
-            REPO_NAME=${NWO_SPLIT[1]}
-            echo "DOCKER_NWO=${DOCKER_USERNAME}/${REPO_NAME}" >> $GITHUB_OUTPUT
-          fi
-        env:
-          DOCKER_USERNAME: ${{ vars.DOCKER_USERNAME }}
-          GITHUB_NWO: ${{ steps.string_repo.outputs.lowercase }}
-      - name: Get tag name
-        if: ${{ steps.vars.outputs.HAS_SECRET_TOKEN }}
-        id: tags
-        shell: bash
-        run: |
-          tags=( )
-          gittag="$(git tag --points-at HEAD)"
-          branch="$(git rev-parse --abbrev-ref HEAD)"
-
-          if [[ -n "${gittag}" ]]; then
-            tags=( "${tags[@]}" "${REPO_NAME}:${gittag}" )
-          fi
-          if [[ -n "${branch}" ]]; then
-            branch="$(echo "${branch}" | sed -E 's|[/]|-|g')"
-            tags=( "${tags[@]}" "${REPO_NAME}:${branch}" )
-            if [ "${branch}" == "master" ]; then
-              tags=( "${tags[@]}" "${tags},${REPO_NAME}:latest" )
-            fi
-          fi
-          function join_by {
-            local d=${1-} f=${2-}
-            if shift 2; then
-              printf %s "$f" "${@/#/$d}"
-            fi
-          }
-          tagstr="$(join_by "," "${tags[@]}")"
-          echo "TAGS=${tagstr}"
-          echo "TAGS=${tagstr}"  >> "${GITHUB_OUTPUT}"
-        env:
-          REPO_NAME: ${{ steps.docker_repo.outputs.DOCKER_NWO }}
-      - name: Install rust
-        run: |
-          rustup default "${{ env.rust_version }}"
-          rustup toolchain install stable
-      - name: Install toml-cli
-        run: |
-          cargo install toml-cli
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
       - name: Get project version
         id: toml
         run: |
-          NEOLINK_VERSION="$(toml get Cargo.toml  package.version | sed 's|"||g')"
-          echo "version=${NEOLINK_VERSION}"  >> $GITHUB_OUTPUT
-      - name: Prepare directory
-        run: |
-          mkdir linux
-          mkdir linux/arm
-          mkdir linux/arm64
+          echo "version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)" >> "${GITHUB_OUTPUT}"
       - name: Download Linux x86_64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-amd64-bookworm
           path: linux/amd64
       - name: Download Linux armv7
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-armhf-bookworm
           path: linux/arm/v7
       - name: Download Linux arm64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-arm64-bookworm
           path: linux/arm64
       - name: Download Linux i386
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-i386-bookworm
           path: linux/386
-      - name: Push to Docker Hub
-        if: ${{ steps.vars.outputs.HAS_SECRET_TOKEN }}
-        uses: docker/build-push-action@v5
+      - name: Push to GitHub Container Registry
+        uses: docker/build-push-action@v7
         with:
           platforms: linux/amd64,linux/arm/v7,linux/arm64,linux/386
           context: .
           push: true
           file: Dockerfile
-          tags: ${{ steps.tags.outputs.TAGS }}
-          build-args: VERSION=${{ steps.toml.outputs.version }}, REPO=${{ github.repository }}, OWNER=${{ vars.DOCKER_USERNAME || github.repository_owner }}
-        env:
-          DOCKER_BUILDKIT: 1
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.toml.outputs.version }}
+            REPO=${{ github.repository }}
+            OWNER=${{ github.repository_owner }}
 
   create_release:
     name: Create Release
@@ -345,7 +278,7 @@ jobs:
       - "native"
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install rust
         run: |
           rustup default "${{ env.rust_version }}"
@@ -359,42 +292,37 @@ jobs:
           NEOLINK_VERSION="$(toml get Cargo.toml  package.version | sed 's|"||g')"
           echo "version=${NEOLINK_VERSION}"  >> $GITHUB_OUTPUT
       - name: Download Windows
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: release-windows-2022
+          name: release-windows-2025
           path: neolink_windows
-      - name: Download Macos
-        uses: actions/download-artifact@v4
-        with:
-          name: release-macos-12
-          path: neolink_macos_intel
       - name: Download Macos arm64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: release-macos-14
+          name: release-macos-15
           path: neolink_macos_m1
       - name: Download Linux x86_64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: release-ubuntu-22.04
+          name: release-ubuntu-24.04
           path: neolink_linux_x86_64_ubuntu
       - name: Download Linux x86_64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-amd64-bookworm
           path: neolink_linux_x86_64_bookworm
       - name: Download Linux armhf
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-armhf-bookworm
           path: neolink_linux_armhf
       - name: Download Linux arm64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-arm64-bookworm
           path: neolink_linux_arm64
       - name: Download Linux i386
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-i386-bookworm
           path: neolink_linux_i386
@@ -402,7 +330,6 @@ jobs:
         run: |
           dirs=(
             neolink_windows
-            neolink_macos_intel
             neolink_macos_m1
             neolink_linux_x86_64_ubuntu
             neolink_linux_x86_64_bookworm
@@ -415,12 +342,11 @@ jobs:
             zip -r "${d}.zip" "${d}"
           done
       - name: release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           name: Neolink ${{steps.toml.outputs.version}}
           files: |
             neolink_windows.zip
-            neolink_macos_intel.zip
             neolink_macos_m1.zip
             neolink_linux_x86_64_ubuntu.zip
             neolink_linux_x86_64_bookworm.zip
