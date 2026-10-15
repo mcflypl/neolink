@@ -31,40 +31,30 @@ camera.
 The Neolink project is not affiliated with Reolink in any way; everything it
 does has been reverse engineered.
 
-## Fork History
+## Features
 
-The upstream QuantumEntangledAndy/neolink is itself an extension of
-[thirtythreeforty's](https://github.com/thirtythreeforty/neolink) original with
-additional features.
+- RTSP streams for cameras that only speak the Baichuan protocol
+- Connection by IP or UID, including cellular cameras through the Reolink relay
+- MQTT control and status, with Home Assistant discovery
+- Motion detection, battery levels, PTZ, PIR, status LED, floodlight and siren
+- Paused streams and idle disconnects to save battery
+- Still images saved to disk
 
-**Major Features**:
-
-- MQTT
-- Motion Detection
-- Paused Streams (when no rtsp client or no motion detected)
-- Save a still image to disk
-
-**Minor Features**:
-
-- Improved error messages when missing gstreamer plugins
-- Protocol more closely follows official reolink format
-  - Possibly can handle more simulatenous connections
-- More ways to connect to the camera. Including Relaying through reolink
-  servers
-- Camera battery levels can be displayed in the log
+Upstream QuantumEntangledAndy/neolink is itself an extension of
+[thirtythreeforty's](https://github.com/thirtythreeforty/neolink) original.
 
 ## Installation
 
+### Binaries
+
 Download from the
 [release page](https://github.com/mcflypl/neolink/releases)
+and extract the zip.
 
-Extract the zip
-
-Install the latest [gstreamer](https://gstreamer.freedesktop.org/download/)
-(1.20.5 as of writing this).
+Install the latest [gstreamer](https://gstreamer.freedesktop.org/download/).
 
 - **Windows**: ensure you install `full` when prompted in the MSI options.
-- **Mac**: Install the dpkg version on the official gstreamer website over
+- **Mac**: Install the `.pkg` installer from the official gstreamer website over
   the brew version
 - **Ubuntu/Debian**: These packages should work
 
@@ -77,7 +67,7 @@ sudo apt install \
   gstreamer1.0-plugins-base \
   gstreamer1.0-plugins-good \
   gstreamer1.0-plugins-bad \
-  libssl
+  libssl3
 ```
 
 - **Windows**: You may also need to
@@ -85,9 +75,36 @@ sudo apt install \
 - **Macos**: You may also need to
   [install openssl](https://wiki.openssl.org/index.php/Binaries) or
   `brew install openssl@1.1`
-- **Ubuntu/Debian**: Install the `libssl` package
+- **Ubuntu/Debian**: Install the `libssl3` package
 
-Make a config file see below.
+Then create a config file as described below.
+
+### Docker
+
+Docker images of this fork are published to the GitHub Container Registry as
+`ghcr.io/mcflypl/neolink` for `linux/amd64`, `linux/arm/v7`, `linux/arm64` and
+`linux/386`. `latest` tracks master, every branch gets its own tag and every
+release tag (e.g. `v0.7.0`) is published as `0.7.0`.
+
+```bash
+docker pull ghcr.io/mcflypl/neolink
+
+# Add `-e "RUST_LOG=debug"` to run with debug logs
+#
+# --network host is only needed if you require to connect
+# via local broadcasts. If you can connect via any other
+# method then normal bridge mode should work fine
+# and you can omit this option. Not all OSes support
+# network=host, notably macos lacks this option.
+docker run --network host --volume=$PWD/config.toml:/etc/neolink.toml ghcr.io/mcflypl/neolink
+```
+
+#### Environment Variables
+
+There are currently 2 environment variables available as part of the container:
+
+- `NEO_LINK_MODE`: defaults to `"rtsp"` if not set, other options are "mqtt" or "mqtt-rtsp".
+- `NEO_LINK_PORT`: defaults to `8554`, set this to your required port value.
 
 ## Config/Usage
 
@@ -95,8 +112,8 @@ Make a config file see below.
 
 To use `neolink` you need a config file.
 
-There's a more complete example
-[here](https://github.com/QuantumEntangledAndy/neolink/blob/master/sample_config.toml),
+There's a more complete example in
+[sample_config.toml](sample_config.toml),
 but the following should work as a minimal example.
 
 ```toml
@@ -148,13 +165,13 @@ The IP is discovered with four methods
    for the camera to be able to contact reolink.
 
 3. Map discovery: In this case we register our IP address with reolink and ask
-   the camera to connect to us. Once the camera either polls/recieves a connect
+   the camera to connect to us. Once the camera either polls/receives a connect
    request from the reolink servers the camera will initiate a connection
    to neolink. This requires that our IP and reolink are reachable from
    the camera.
 
-4. Relay: In this case we request that reolink relay our connection. Neolink
-   nor the camera need to be able to direcly contact each other. But both
+4. Relay: In this case we request that reolink relay our connection. Neither neolink
+   nor the camera need to be able to directly contact each other. But both
    neolink and the camera need to be able to contact reolink.
 
 This can be controlled with the config
@@ -165,7 +182,7 @@ discovery = "local"
 
 In the `[[cameras]]` section of the toml.
 
-Possible values are `local`, `remote`, `map`, `relay` later values implictly
+Possible values are `local`, `remote`, `map` and `relay`; later values implicitly
 enable prior methods.
 
 #### Cellular
@@ -256,15 +273,15 @@ Status Messages:
 - `/status/pir` Sent in reply to a `/query/pir` an XML encoded version of the
   pir status
 - `/status/motion` Contains the motion detection alarm status. `on` for motion
-  and `off` for still, only published when `enable_moton` is true in the config
+  and `off` for still, only published when `enable_motion` is true in the config
 - `/status/ptz/preset` Sent in reply to a `/query/ptz/preset` an XML encoded
   version of the PTZ presets
 - `/status/preview` a base64 encoded camera image updated every 2s. Not
   every camera supports the snapshot command needed for this. In such cases
   there will be no `/status/preview` message. Only published when
   `enable_preview` is true in the config
-- `/status/floodlight_tasks` The current status of the floodlight tasks
-  used updated every 2s by default
+- `/status/floodlight_tasks` The current status of the floodlight tasks,
+  updated every 2s by default
 
 Query Messages:
 
@@ -347,7 +364,7 @@ enable_battery = false       # battery updates in `/status/battery_level`
                              #
 enable_preview = false       # preview image in `/status/preview`
                              #
-enable_floodlight = false    # preview image in `/status/floodlight_tasks`
+enable_floodlight = false    # floodlight task status in `/status/floodlight_tasks`
                              #
 battery_update = 2000        # Number of ms between `/status/battery_level` updates
                              #
@@ -377,9 +394,9 @@ Available features are:
   every 0.5s and cannot be much more than that since it is updated over mqtt
   not over RTSP. Not every camera supports the snapshot command needed for
   this. In such cases there will be no `/status/preview` message.
-- `led`: This adds a switch to chage the LED status light on/off to home
+- `led`: This adds a switch to change the LED status light on/off to home
   assistant
-- `ir`: This adds a selection switch to chage the IR light on/off/auto to home
+- `ir`: This adds a selection switch to change the IR light on/off/auto to home
   assistant
 - `motion`: This adds a motion detection binary sensor to home assistant
 - `reboot`: This adds a reboot button to home assistant
@@ -404,7 +421,7 @@ update_time = false # When camera connects, force the setting of the camera date
 print_format = "None"  # Type of format that logs are displayed in (None, Human, Xml). The default is None
 ```
 
-- **Debug:** Will dump the various XMLs from the camera as they are recieved
+- **Debug:** Will dump the various XMLs from the camera as they are received
 and decrypted. Leave this off unless asked for it to fix an issue.
 
 - **Enabled:** Useful if you want to remove a camera from rtsp without deleting
@@ -413,7 +430,7 @@ it from the config
 - **update_time:** Used to FORCE an update on the camera time. Usually it checks
 if it is needed but this
 will force it regardless. (Mostly this was introduced to address a specific
-ssue a user had)
+issue a user had)
 
 - **print_format:** Used for adjusting printing of some values mostly, battery
 messages
@@ -446,7 +463,7 @@ Then start the rtsp server as usual:
 
 To really save battery we need to disconnect the camera when it is idle.
 
-To acheieve this you can add `idle_disconnect = true` to the `[[cameras]]`
+To achieve this you can add `idle_disconnect = true` to the `[[cameras]]`
 section
 
 ```toml
@@ -467,11 +484,7 @@ When `idle_disconnect = true` neolink will disconnect from the camera 30s
 after it stops being used.
 
 Neolink considers it as being used if there is an active stream running, or
-if there is motion being detected or an mqtt command being run
-
-[Because google remove the api for the push notifications we cannot
-reliably use push notifications to wake up, so motion won't wake
-up neolink anymore]
+if there is motion being detected or an mqtt command being run.
 
 You can make neolink stop active streams when there are no rtsp clients using
 
@@ -480,41 +493,12 @@ You can make neolink stop active streams when there are no rtsp clients using
   on_client = true # Should pause when no rtsp client
 ```
 
-Once in the disconnected state. Neolink will stay disconnected until there is a
-new requested activation such as a client connecting or an mqtt command
+Once in the disconnected state neolink will stay disconnected until there is a
+new requested activation such as a client connecting or an mqtt command.
 
-~Neolink will also wake up on push notifications from the camera. These are usually
-sent by the camera on motion or PIR alarms. To disable this you can set
-`push_notifications = false` in the `[[cameras]]` config~
-
-[Google removed the apis we were using for push notifications]
-
-### Docker
-
-Docker images of this fork are published to the GitHub Container Registry as
-`ghcr.io/mcflypl/neolink` for `linux/amd64`, `linux/arm/v7`, `linux/arm64` and
-`linux/386`. `latest` tracks master, every branch gets its own tag and every
-release tag (e.g. `v0.7.0`) is published as `0.7.0`.
-
-```bash
-docker pull ghcr.io/mcflypl/neolink
-
-# Add `-e "RUST_LOG=debug"` to run with debug logs
-#
-# --network host is only needed if you require to connect
-# via local broadcasts. If you can connect via any other
-# method then normal bridge mode should work fine
-# and you can ommit this option. Not all OSes support
-# network=host, notably macos lacks this option.
-docker run --network host --volume=$PWD/config.toml:/etc/neolink.toml ghcr.io/mcflypl/neolink
-```
-
-#### Environmental Variables
-
-There are currently 2 environmental variables available as part of the container:
-
-- `NEO_LINK_MODE`: defaults to `"rtsp"` if not set, other options are "mqtt" or "mqtt-rtsp".
-- `NEO_LINK_PORT`: defaults to `8554`, set this to your required port value.
+Push notifications can no longer wake neolink up, because Google removed the
+API they relied on. Set `push_notifications = false` in the `[[cameras]]`
+section to stop neolink from trying and logging the failures.
 
 ### Image
 
@@ -580,7 +564,7 @@ neolink talk --config=config.toml --adpcm-file=data.adpc\
                --sample-rate=16000 --block-size=512 CameraName
 ```
 
-Where the sounds is ADPCM encoded
+Where the sound is ADPCM encoded
 
 or
 

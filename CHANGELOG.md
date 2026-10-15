@@ -34,13 +34,17 @@ First release of this fork, based on upstream commit `6e05e78` (`0.6.3-rc.3`).
   Docker Hub.
 - CI uses current versions of the GitHub and Docker actions and the
   `ubuntu-24.04`, `windows-2025` and `macos-15` runners.
-- README describes the fork and points to its releases and images.
+- README describes the fork and points to its releases and images; installation
+  covers binaries and Docker together, and stale notes and typos are cleaned up.
+- pre-commit uses `pre-commit-hooks` v6.0.0 and runs `cargo fmt` as a local hook
+  instead of the unmaintained `doublify/pre-commit-rust`.
 
 ### Removed
 
 - macOS Intel build, as the `macos-12` runner it used is retired.
 - Docker Hub image pruning workflow.
 - Donation links and `FUNDING.yml`.
+- markdownlint pre-commit hook and its configuration.
 
 [Unreleased]: https://github.com/mcflypl/neolink/compare/v0.7.0...HEAD
 [0.7.0]: https://github.com/mcflypl/neolink/compare/6e05e78...v0.7.0
