@@ -43,62 +43,35 @@ jobs:
           sudo aptitude install -y libgstrtspserver-1.0-dev libgstreamer1.0-dev libgtk2.0-dev protobuf-compiler libssl-dev
       - if: runner.os == 'Windows'
         name: Install Windows deps
+        shell: pwsh
         run: |
-          # Gstreamer
-          choco install -y --no-progress gstreamer --version=1.24.2
-          choco install -y --no-progress gstreamer-devel --version=1.24.2
-          $env:GSTREAMER_1_0_ROOT_MSVC_X86_64=$env:SYSTEMDRIVE + '\gstreamer\1.0\msvc_x86_64\'
-          # Github runners work on both C or D drive and figuring out which was used is difficult
-          if (-not (Test-Path -Path "$env:GSTREAMER_1_0_ROOT_MSVC_X86_64" -PathType Container)) {
-            $env:GSTREAMER_1_0_ROOT_MSVC_X86_64='D:\\gstreamer\1.0\msvc_x86_64\'
+          choco install -y --no-progress gstreamer --version=1.26.9
+          choco install -y --no-progress gstreamer-devel --version=1.26.9
+          choco install -y --no-progress protoc --version=36.2.0
+          choco install -y --no-progress openssl --version=3.6.2
+
+          # The installers record their location machine-wide, which the current shell does not see yet
+          $gst = [Environment]::GetEnvironmentVariable('GSTREAMER_1_0_ROOT_MSVC_X86_64', 'Machine')
+          if (-not $gst) {
+            $gst = @("$env:ProgramFiles\gstreamer\1.0\msvc_x86_64\", "C:\gstreamer\1.0\msvc_x86_64\", "D:\gstreamer\1.0\msvc_x86_64\") |
+              Where-Object { Test-Path $_ -PathType Container } | Select-Object -First 1
           }
-          echo "GSTREAMER_1_0_ROOT_MSVC_X86_64=$env:GSTREAMER_1_0_ROOT_MSVC_X86_64"
+          $ssl = @("$env:ProgramFiles\OpenSSL-Win64\", "$env:ProgramFiles\OpenSSL\", "D:\Program Files\OpenSSL-Win64\", "D:\Program Files\OpenSSL\") |
+            Where-Object { Test-Path $_ -PathType Container } | Select-Object -First 1
+          if (-not $gst -or -not $ssl) { throw "GStreamer ($gst) or OpenSSL ($ssl) not found" }
+          echo "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst"
+          echo "OPENSSL_DIR=$ssl"
 
-          # Proto buffers
-          choco install -y --no-progress protoc --version=24.2.0
-
-          # Open SSL
-          choco install -y --no-progress openssl --version=1.1.1.2100
-          $env:OPENSSL_DIR=$env:SYSTEMDRIVE + '\Program Files\OpenSSL-Win64\'
-
-          # Alternative openssl location (depends on version that gets installed by choco)
-          if (-not (Test-Path -Path "$env:OPENSSL_DIR" -PathType Container)) {
-            $env:OPENSSL_DIR=$env:SYSTEMDRIVE + '\Program Files\OpenSSL\'
-          }
-          # Github runners work on both C or D drive and figuring out which was used is difficult
-          if (-not (Test-Path -Path "$env:OPENSSL_DIR" -PathType Container)) {
-            $env:OPENSSL_DIR='D:\\Program Files\OpenSSL-Win64\'
-          }
-          # Or course we could be on alternative location and drive....
-          if (-not (Test-Path -Path "$env:OPENSSL_DIR" -PathType Container)) {
-            $env:OPENSSL_DIR='D:\\Program Files\OpenSSL\'
-          }
-
-          # Set github vars
-          Add-Content -Path $env:GITHUB_ENV  -Value "GSTREAMER_1_0_ROOT_MSVC_X86_64=$env:GSTREAMER_1_0_ROOT_MSVC_X86_64"
-          Add-Content -Path $env:GITHUB_PATH  -Value "$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\bin"
-          Add-Content -Path $env:GITHUB_PATH  -Value "%GSTREAMER_1_0_ROOT_MSVC_X86_64%\bin"
-          Add-Content -Path $env:GITHUB_ENV  -Value "OPENSSL_DIR=$env:OPENSSL_DIR"
-
-          # One last check on directories
-          dir "$env:GSTREAMER_1_0_ROOT_MSVC_X86_64"
-          dir "$env:OPENSSL_DIR"
+          Add-Content -Path $env:GITHUB_ENV -Value "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst"
+          Add-Content -Path $env:GITHUB_PATH -Value "$gst\bin"
+          Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_DIR=$ssl"
       - if: runner.os == 'macOS'
         name: Install macOS deps
         run: |
-          GST_VERSION=1.28.8
-          for pkg in "gstreamer-1.0-${GST_VERSION}-universal.pkg" "gstreamer-1.0-devel-${GST_VERSION}-universal.pkg"; do
-            curl -fL "https://gstreamer.freedesktop.org/data/pkg/osx/${GST_VERSION}/${pkg}" -o "$(pwd)/${pkg}"
-            sudo installer -verbose -pkg "$(pwd)/${pkg}" -target /
-          done
-          PKG_CONFIG_PATH="/Library/Frameworks/GStreamer.framework/Versions/1.0/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
-          PKG_CONFIG_GSTREAMER_1_0_PREFIX="/Library/Frameworks/GStreamer.framework/Versions/1.0"
-          echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> "${GITHUB_ENV}"
-          echo "PKG_CONFIG_GSTREAMER_1_0_PREFIX=${PKG_CONFIG_GSTREAMER_1_0_PREFIX}" >> "${GITHUB_ENV}"
-          echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
-          brew install pkg-config protobuf openssl@3
-          echo "OPENSSL_INCLUDE_DIR=$(brew --prefix openssl@3)/include/" >>  "${GITHUB_ENV}"
-          echo "OPENSSL_LIB_DIR=$(brew --prefix openssl@3)/lib/" >>  "${GITHUB_ENV}"
+          # gstreamer.freedesktop.org answers GitHub runners with 503, so use Homebrew
+          brew install pkg-config protobuf openssl@3 gstreamer
+          echo "OPENSSL_INCLUDE_DIR=$(brew --prefix openssl@3)/include/" >> "${GITHUB_ENV}"
+          echo "OPENSSL_LIB_DIR=$(brew --prefix openssl@3)/lib/" >> "${GITHUB_ENV}"
       - name: Cache cargo registry
         uses: actions/cache@v6
         with:

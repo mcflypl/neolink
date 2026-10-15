@@ -34,10 +34,13 @@ First release of this fork, based on upstream commit `6e05e78` (`0.6.3-rc.3`).
   Docker Hub.
 - CI uses current versions of the GitHub and Docker actions and the
   `ubuntu-24.04`, `windows-2025` and `macos-15` runners; cross builds use Rust 1.99.0.
-- macOS CI installs GStreamer 1.28.8 (the 1.20.4 package is gone) and OpenSSL 3
-  instead of the disabled `openssl@1.1` formula.
+- macOS CI uses OpenSSL 3 instead of the disabled `openssl@1.1` formula.
 - README describes the fork and points to its releases and images; installation
   covers binaries and Docker together, and stale notes and typos are cleaned up.
+- Dependencies updated to their latest semver-compatible releases; the old
+  `rustix` 0.37 no longer breaks nightly Clippy.
+- Windows CI installs GStreamer 1.26.9, protoc 36.2.0 and OpenSSL 3.6.2 and finds
+  them through the installers' own paths; macOS CI takes GStreamer from Homebrew.
 - pre-commit uses `pre-commit-hooks` v6.0.0 and runs `cargo fmt` as a local hook
   instead of the unmaintained `doublify/pre-commit-rust`.
 
