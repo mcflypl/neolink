@@ -2,7 +2,7 @@
 # Copyright (c) 2020 George Hilliard,
 #                    Andrew King,
 #                    Miroslav Šedivý
-# Copyright (c) 2026 McFly <michal@mcfly.pl>
+# Copyright (c) 2026 McFly (https://mcfly.pl/)
 # SPDX-License-Identifier: AGPL-3.0-only
 
 FROM docker.io/rust:slim-bookworm AS build

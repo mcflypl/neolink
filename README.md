@@ -613,5 +613,10 @@ v3.
 This means that if you incorporate it into a piece of software available over
 the network, you must offer that software's source code to your users.
 
-See [LICENSE.md](LICENSE.md) for the copyright notices and [LICENSE](LICENSE) for
-the full license text.
+The full license text is in [LICENSE](LICENSE).
+
+- Copyright (c) 2020 George Hilliard, Andrew King, Miroslav Šedivý and the
+  contributors of [thirtythreeforty/neolink](https://github.com/thirtythreeforty/neolink)
+  and [QuantumEntangledAndy/neolink](https://github.com/QuantumEntangledAndy/neolink)
+- Copyright (c) 2026 [McFly](https://mcfly.pl/) for the changes made in this
+  fork, listed in [CHANGELOG.md](CHANGELOG.md)
