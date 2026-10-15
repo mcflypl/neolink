@@ -213,7 +213,9 @@ pub(crate) struct CameraConfig {
     )]
     pub(crate) max_discovery_retries: usize,
 
+    // Push notifications were removed with Google's legacy FCM API; still accepted so old configs load
     #[serde(default = "default_true", alias = "push", alias = "push_noti")]
+    #[allow(dead_code)]
     pub(crate) push_notifications: bool,
 
     #[serde(default = "default_false", alias = "idle", alias = "idle_disc")]
