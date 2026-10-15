@@ -10,7 +10,7 @@ use neolink_core::{
         BcMedia, BcMediaIframe, BcMediaInfoV1, BcMediaInfoV2, BcMediaPframe, VideoType,
     },
 };
-use tokio::{sync::mpsc::channel as mpsc, task::JoinHandle};
+use tokio::{sync::mpsc::channel as mpsc, task::JoinHandle, time::timeout};
 
 use crate::{common::NeoInstance, rtsp::gst::NeoMediaFactory, AnyResult};
 
@@ -146,9 +146,12 @@ pub(super) async fn make_dummy_factory(
 enum ClientMsg {
     NewClient {
         element: Element,
-        reply: tokio::sync::oneshot::Sender<Element>,
+        reply: std::sync::mpsc::SyncSender<Element>,
     },
 }
+
+/// Covers a relay reconnect over 4G, login and the first frames.
+const CLIENT_SETUP_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub(super) async fn make_factory(
     camera: NeoInstance,
@@ -167,29 +170,48 @@ pub(super) async fn make_factory(
                     let name = name.clone();
                     tokio::task::spawn(async move {
                         clear_bin(&element)?;
-                        log::trace!("{name}::{stream}: Starting camera");
+                        log::debug!("{name}::{stream}: Starting camera");
 
-                        // Start the camera
-                        let config = camera.config().await?.borrow().clone();
-                        let mut media_rx = camera.stream_while_live(stream).await?;
+                        let setup = timeout(CLIENT_SETUP_TIMEOUT, async {
+                            // Start the camera
+                            let config = camera.config().await?.borrow().clone();
+                            let mut media_rx = camera.stream_while_live(stream).await?;
 
-                        log::trace!("{name}::{stream}: Learning camera stream type");
-                        // Learn the camera data type
-                        let mut buffer = vec![];
-                        let mut frame_count = 0usize;
+                            log::debug!("{name}::{stream}: Learning camera stream type");
+                            // Learn the camera data type
+                            let mut buffer = vec![];
+                            let mut frame_count = 0usize;
 
-                        let mut stream_config = StreamConfig::new(&camera, stream).await?;
-                        while let Some(media) = media_rx.recv().await {
-                            stream_config.update_from_media(&media);
-                            buffer.push(media);
-                            if frame_count > 10
-                                || (stream_config.vid_type.is_some()
-                                    && stream_config.aud_type.is_some())
-                            {
-                                break;
+                            let mut stream_config = StreamConfig::new(&camera, stream).await?;
+                            while let Some(media) = media_rx.recv().await {
+                                stream_config.update_from_media(&media);
+                                buffer.push(media);
+                                if frame_count > 10
+                                    || (stream_config.vid_type.is_some()
+                                        && stream_config.aud_type.is_some())
+                                {
+                                    break;
+                                }
+                                frame_count += 1;
                             }
-                            frame_count += 1;
-                        }
+                            AnyResult::Ok((config, media_rx, buffer, stream_config))
+                        })
+                        .await
+                        .map_err(|_| {
+                            anyhow!(
+                                "camera did not deliver the stream within {CLIENT_SETUP_TIMEOUT:?}"
+                            )
+                        })
+                        .and_then(|r| r);
+                        let (config, mut media_rx, mut buffer, stream_config) = match setup {
+                            Ok(setup) => setup,
+                            Err(e) => {
+                                log::warn!(
+                                    "{name}::{stream}: Could not start the client stream: {e:?}"
+                                );
+                                return Err(e);
+                            }
+                        };
 
                         log::trace!("{name}::{stream}: Building the pipeline");
                         // Build the right video pipeline
@@ -238,7 +260,12 @@ pub(super) async fn make_factory(
 
                         log::trace!("{name}::{stream}: Sending pipeline to gstreamer");
                         // Send the pipeline back to the factory so it can start
-                        let _ = reply.send(element);
+                        if reply.send(element).is_err() {
+                            log::warn!(
+                                "{name}::{stream}: Client gave up before the stream was ready"
+                            );
+                            return AnyResult::Ok(());
+                        }
 
                         // Run blocking code on a seperate thread
                         // This is not an async thread
@@ -289,10 +316,14 @@ pub(super) async fn make_factory(
 
     // Now setup the factory
     let factory = NeoMediaFactory::new_with_callback(move |element| {
-        let (reply, new_element) = tokio::sync::oneshot::channel();
+        let (reply, new_element) = std::sync::mpsc::sync_channel(1);
         client_tx.blocking_send(ClientMsg::NewClient { element, reply })?;
 
-        let element = new_element.blocking_recv()?;
+        // This runs on the GLib main loop that serves every RTSP client, so an unbounded
+        // wait on a stalled camera freezes the whole server.
+        let element = new_element
+            .recv_timeout(CLIENT_SETUP_TIMEOUT + Duration::from_secs(5))
+            .with_context(|| "Timed out waiting for the camera stream")?;
         Ok(Some(element))
     })
     .await?;
