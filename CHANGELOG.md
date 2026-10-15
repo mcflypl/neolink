@@ -33,7 +33,7 @@ First release of this fork, based on upstream commit `6e05e78` (`0.6.3-rc.3`).
   (`ghcr.io/mcflypl/neolink`) with the built-in `GITHUB_TOKEN` instead of
   Docker Hub.
 - CI uses current versions of the GitHub and Docker actions and the
-  `ubuntu-24.04`, `windows-2025` and `macos-15` runners.
+  `ubuntu-24.04`, `windows-2025` and `macos-15` runners; cross builds use Rust 1.99.0.
 - README describes the fork and points to its releases and images; installation
   covers binaries and Docker together, and stale notes and typos are cleaned up.
 - pre-commit uses `pre-commit-hooks` v6.0.0 and runs `cargo fmt` as a local hook
