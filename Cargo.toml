@@ -43,7 +43,8 @@ toml = "0.8.2"
 uuid = { version = "1.8.0", features = ["v4"] }
 validator = {version="0.18.1", features = ["derive"] }
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
+# jemalloc does not build for Windows targets, MSVC or MinGW
+[target.'cfg(not(windows))'.dependencies]
 tikv-jemallocator = "0.5"
 
 [features]

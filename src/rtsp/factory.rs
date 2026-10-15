@@ -1,5 +1,9 @@
 use gstreamer::ClockTime;
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use anyhow::{anyhow, Context, Result};
 use gstreamer::{prelude::*, Bin, Caps, Element, ElementFactory, FlowError, GhostPad};
@@ -7,7 +11,7 @@ use gstreamer_app::{AppSrc, AppSrcCallbacks, AppStreamType};
 use neolink_core::{
     bc_protocol::StreamKind,
     bcmedia::model::{
-        BcMedia, BcMediaIframe, BcMediaInfoV1, BcMediaInfoV2, BcMediaPframe, VideoType,
+        BcMedia, BcMediaAac, BcMediaIframe, BcMediaInfoV1, BcMediaInfoV2, BcMediaPframe, VideoType,
     },
 };
 use tokio::{sync::mpsc::channel as mpsc, task::JoinHandle, time::timeout};
@@ -152,12 +156,84 @@ enum ClientMsg {
 
 /// Covers a relay reconnect over 4G, login and the first frames.
 const CLIENT_SETUP_TIMEOUT: Duration = Duration::from_secs(30);
+/// How often the last keyframe is repeated while a sleeping camera wakes up.
+const KEYFRAME_FILL_INTERVAL: Duration = Duration::from_millis(500);
+
+/// Silent audio frames needed before the AAC decoder emits samples.
+const AUDIO_PRIMING_FRAMES: usize = 4;
+
+/// What a previous client learned about the stream, so the next one can be answered at once.
+#[derive(Clone)]
+struct StreamCache {
+    config: StreamConfig,
+    keyframe: Option<BcMedia>,
+    audio_frame: Option<BcMedia>,
+}
+
+fn is_audio(media: &BcMedia) -> bool {
+    matches!(media, BcMedia::Aac(_) | BcMedia::Adpcm(_))
+}
+
+/// Builds a silent AAC frame with the ADTS header of a frame from the camera.
+///
+/// The payloads are the silent raw data blocks FFmpeg's encoder emits for AAC-LC.
+fn silent_aac(template: &BcMedia) -> Option<BcMedia> {
+    let BcMedia::Aac(aac) = template else {
+        return None;
+    };
+    let header = aac.data.get(..7)?;
+    if header[0] != 0xff || header[1] & 0xf0 != 0xf0 {
+        return None;
+    }
+    let channels = ((header[2] & 0b1) << 2) | (header[3] >> 6);
+    let payload: &[u8] = match channels {
+        1 => &[0x01, 0x18, 0x20, 0x07],
+        2 => &[0x21, 0x10, 0x04, 0x60, 0x8c, 0x1c],
+        _ => return None,
+    };
+    let len = header.len() + payload.len();
+    let mut data = header.to_vec();
+    data[1] |= 0b1; // no CRC, so the header stays 7 bytes
+    data[3] = (data[3] & 0b1111_1100) | ((len >> 11) & 0b11) as u8;
+    data[4] = ((len >> 3) & 0xff) as u8;
+    data[5] = (data[5] & 0b0001_1111) | (((len & 0b111) as u8) << 5);
+    data[6] &= 0b1111_1100; // a single raw data block
+    data.extend_from_slice(payload);
+    Some(BcMedia::Aac(BcMediaAac { data }))
+}
+
+type SharedCache = Arc<Mutex<Option<StreamCache>>>;
 
 pub(super) async fn make_factory(
     camera: NeoInstance,
     stream: StreamKind,
 ) -> AnyResult<(NeoMediaFactory, JoinHandle<AnyResult<()>>)> {
     let (client_tx, mut client_rx) = mpsc(100);
+    let cache: SharedCache = Default::default();
+
+    // Learn the stream once up front so even the first client after start-up is answered at once
+    let warm_camera = camera.clone();
+    let warm_cache = cache.clone();
+    tokio::task::spawn(async move {
+        let name = warm_camera.config().await?.borrow().name.clone();
+        match learn_stream(&warm_camera, stream, &name).await {
+            Ok((config, buffer, _media_rx)) => {
+                let mut cache = warm_cache.lock().unwrap();
+                if cache.is_none() {
+                    cache.replace(StreamCache {
+                        config,
+                        keyframe: buffer
+                            .iter()
+                            .find(|m| matches!(m, BcMedia::Iframe(_)))
+                            .cloned(),
+                        audio_frame: buffer.iter().find(|m| is_audio(m)).cloned(),
+                    });
+                }
+            }
+            Err(e) => log::info!("{name}::{stream}: Could not learn the stream type yet: {e:?}"),
+        }
+        AnyResult::Ok(())
+    });
     // Create the task that creates the pipelines
     let thread = tokio::task::spawn(async move {
         let name = camera.config().await?.borrow().name.clone();
@@ -168,145 +244,15 @@ pub(super) async fn make_factory(
                     log::debug!("New client for {name}::{stream}");
                     let camera = camera.clone();
                     let name = name.clone();
+                    let cache = cache.clone();
                     tokio::task::spawn(async move {
-                        clear_bin(&element)?;
-                        log::debug!("{name}::{stream}: Starting camera");
-
-                        let setup = timeout(CLIENT_SETUP_TIMEOUT, async {
-                            // Start the camera
-                            let config = camera.config().await?.borrow().clone();
-                            let mut media_rx = camera.stream_while_live(stream).await?;
-
-                            log::debug!("{name}::{stream}: Learning camera stream type");
-                            // Learn the camera data type
-                            let mut buffer = vec![];
-                            let mut frame_count = 0usize;
-
-                            let mut stream_config = StreamConfig::new(&camera, stream).await?;
-                            while let Some(media) = media_rx.recv().await {
-                                stream_config.update_from_media(&media);
-                                buffer.push(media);
-                                if frame_count > 10
-                                    || (stream_config.vid_type.is_some()
-                                        && stream_config.aud_type.is_some())
-                                {
-                                    break;
-                                }
-                                frame_count += 1;
-                            }
-                            AnyResult::Ok((config, media_rx, buffer, stream_config))
-                        })
-                        .await
-                        .map_err(|_| {
-                            anyhow!(
-                                "camera did not deliver the stream within {CLIENT_SETUP_TIMEOUT:?}"
-                            )
-                        })
-                        .and_then(|r| r);
-                        let (config, mut media_rx, mut buffer, stream_config) = match setup {
-                            Ok(setup) => setup,
-                            Err(e) => {
-                                log::warn!(
-                                    "{name}::{stream}: Could not start the client stream: {e:?}"
-                                );
-                                return Err(e);
-                            }
-                        };
-
-                        log::trace!("{name}::{stream}: Building the pipeline");
-                        // Build the right video pipeline
-                        let vid_src = match stream_config.vid_type.as_ref() {
-                            Some(VideoType::H264) => {
-                                let src = build_h264(&element, &stream_config)?;
-                                AnyResult::Ok(Some(src))
-                            }
-                            Some(VideoType::H265) => {
-                                let src = build_h265(&element, &stream_config)?;
-                                AnyResult::Ok(Some(src))
-                            }
-                            None => {
-                                build_unknown(&element, &config.splash_pattern.to_string())?;
-                                AnyResult::Ok(None)
-                            }
-                        }?;
-
-                        // Build the right audio pipeline
-                        let aud_src = match stream_config.aud_type.as_ref() {
-                            Some(AudioType::Aac) => {
-                                let src = build_aac(&element, &stream_config)?;
-                                AnyResult::Ok(Some(src))
-                            }
-                            Some(AudioType::Adpcm(block_size)) => {
-                                let src = build_adpcm(&element, *block_size, &stream_config)?;
-                                AnyResult::Ok(Some(src))
-                            }
-                            None => AnyResult::Ok(None),
-                        }?;
-
-                        if let Some(app) = vid_src.as_ref() {
-                            app.set_callbacks(
-                                AppSrcCallbacks::builder()
-                                    .seek_data(move |_, _seek_pos| true)
-                                    .build(),
-                            );
-                        }
-                        if let Some(app) = aud_src.as_ref() {
-                            app.set_callbacks(
-                                AppSrcCallbacks::builder()
-                                    .seek_data(move |_, _seek_pos| true)
-                                    .build(),
-                            );
-                        }
-
-                        log::trace!("{name}::{stream}: Sending pipeline to gstreamer");
-                        // Send the pipeline back to the factory so it can start
-                        if reply.send(element).is_err() {
+                        let r = serve_client(camera, stream, &name, element, reply, cache).await;
+                        if let Err(e) = &r {
                             log::warn!(
-                                "{name}::{stream}: Client gave up before the stream was ready"
+                                "{name}::{stream}: Could not start the client stream: {e:?}"
                             );
-                            return AnyResult::Ok(());
                         }
-
-                        // Run blocking code on a seperate thread
-                        // This is not an async thread
-                        std::thread::spawn(move || {
-                            let mut aud_ts = 0u32;
-                            let mut vid_ts = 0u32;
-                            let mut pools = Default::default();
-
-                            log::trace!("{name}::{stream}: Sending buffered frames");
-                            for buffered in buffer.drain(..) {
-                                send_to_sources(
-                                    buffered,
-                                    &mut pools,
-                                    &vid_src,
-                                    &aud_src,
-                                    &mut vid_ts,
-                                    &mut aud_ts,
-                                    &stream_config,
-                                )?;
-                            }
-
-                            log::trace!("{name}::{stream}: Sending new frames");
-                            while let Some(data) = media_rx.blocking_recv() {
-                                let r = send_to_sources(
-                                    data,
-                                    &mut pools,
-                                    &vid_src,
-                                    &aud_src,
-                                    &mut vid_ts,
-                                    &mut aud_ts,
-                                    &stream_config,
-                                );
-                                if let Err(r) = &r {
-                                    log::info!("Failed to send to source: {r:?}");
-                                }
-                                r?;
-                            }
-                            log::trace!("All media recieved");
-                            AnyResult::Ok(())
-                        });
-                        AnyResult::Ok(())
+                        r
                     });
                 }
             }
@@ -328,6 +274,236 @@ pub(super) async fn make_factory(
     })
     .await?;
     Ok((factory, thread))
+}
+
+/// Learns the stream type from the first frames of a freshly started camera stream.
+async fn learn_stream(
+    camera: &NeoInstance,
+    stream: StreamKind,
+    name: &str,
+) -> AnyResult<(
+    StreamConfig,
+    Vec<BcMedia>,
+    tokio::sync::mpsc::Receiver<BcMedia>,
+)> {
+    timeout(CLIENT_SETUP_TIMEOUT, async {
+        let mut media_rx = camera.stream_while_live(stream).await?;
+        log::debug!("{name}::{stream}: Learning camera stream type");
+        let mut buffer = vec![];
+        let mut frame_count = 0usize;
+        let mut stream_config = StreamConfig::new(camera, stream).await?;
+        while let Some(media) = media_rx.recv().await {
+            stream_config.update_from_media(&media);
+            buffer.push(media);
+            if frame_count > 10
+                || (stream_config.vid_type.is_some() && stream_config.aud_type.is_some())
+            {
+                break;
+            }
+            frame_count += 1;
+        }
+        AnyResult::Ok((stream_config, buffer, media_rx))
+    })
+    .await
+    .map_err(|_| anyhow!("camera did not deliver the stream within {CLIENT_SETUP_TIMEOUT:?}"))?
+}
+
+async fn serve_client(
+    camera: NeoInstance,
+    stream: StreamKind,
+    name: &str,
+    element: Element,
+    reply: std::sync::mpsc::SyncSender<Element>,
+    cache: SharedCache,
+) -> AnyResult<()> {
+    clear_bin(&element)?;
+    let config = camera.config().await?.borrow().clone();
+
+    // A sleeping 4G camera needs ~10 s to wake up, longer than clients such as Home Assistant
+    // (5 s socket timeout) wait for DESCRIBE. With a known stream type the pipeline is handed
+    // over at once and the last keyframe stands in until live frames arrive.
+    let cached = cache.lock().unwrap().clone();
+    let (stream_config, stand_in, learned) = match cached {
+        Some(cached) => {
+            log::debug!("{name}::{stream}: Answering from the cached stream type");
+            (cached.config, (cached.keyframe, cached.audio_frame), None)
+        }
+        None => {
+            log::debug!("{name}::{stream}: Starting camera");
+            let (stream_config, buffer, media_rx) = learn_stream(&camera, stream, name).await?;
+            let keyframe = buffer
+                .iter()
+                .find(|m| matches!(m, BcMedia::Iframe(_)))
+                .cloned();
+            let audio_frame = buffer.iter().find(|m| is_audio(m)).cloned();
+            cache.lock().unwrap().replace(StreamCache {
+                config: stream_config.clone(),
+                keyframe,
+                audio_frame,
+            });
+            (stream_config, (None, None), Some((buffer, media_rx)))
+        }
+    };
+
+    log::trace!("{name}::{stream}: Building the pipeline");
+    // Build the right video pipeline
+    let vid_src = match stream_config.vid_type.as_ref() {
+        Some(VideoType::H264) => Some(build_h264(&element, &stream_config)?),
+        Some(VideoType::H265) => Some(build_h265(&element, &stream_config)?),
+        None => {
+            build_unknown(&element, &config.splash_pattern.to_string())?;
+            None
+        }
+    };
+
+    // Build the right audio pipeline
+    let aud_src = match stream_config.aud_type.as_ref() {
+        Some(AudioType::Aac) => Some(build_aac(&element, &stream_config)?),
+        Some(AudioType::Adpcm(block_size)) => {
+            Some(build_adpcm(&element, *block_size, &stream_config)?)
+        }
+        None => None,
+    };
+
+    for app in vid_src.iter().chain(aud_src.iter()) {
+        app.set_callbacks(
+            AppSrcCallbacks::builder()
+                .seek_data(move |_, _seek_pos| true)
+                .build(),
+        );
+    }
+
+    log::trace!("{name}::{stream}: Sending pipeline to gstreamer");
+    // Send the pipeline back to the factory so it can start
+    if reply.send(element).is_err() {
+        log::warn!("{name}::{stream}: Client gave up before the stream was ready");
+        return Ok(());
+    }
+
+    let (frame_tx, frame_rx) = std::sync::mpsc::channel();
+    let forward_name = name.to_string();
+    tokio::task::spawn(async move {
+        let mut media_rx = match learned {
+            Some((buffer, media_rx)) => {
+                for media in buffer {
+                    if frame_tx.send(media).is_err() {
+                        return;
+                    }
+                }
+                media_rx
+            }
+            None => match timeout(CLIENT_SETUP_TIMEOUT, camera.stream_while_live(stream)).await {
+                Ok(Ok(media_rx)) => media_rx,
+                Ok(Err(e)) => {
+                    log::warn!("{forward_name}::{stream}: Could not wake the camera: {e:?}");
+                    return;
+                }
+                Err(_) => {
+                    log::warn!(
+                        "{forward_name}::{stream}: Camera did not wake within {CLIENT_SETUP_TIMEOUT:?}"
+                    );
+                    return;
+                }
+            },
+        };
+        while let Some(media) = media_rx.recv().await {
+            if let Some(cached) = cache.lock().unwrap().as_mut() {
+                if matches!(media, BcMedia::Iframe(_)) {
+                    cached.keyframe = Some(media.clone());
+                } else if is_audio(&media) {
+                    cached.audio_frame = Some(media.clone());
+                }
+            }
+            if frame_tx.send(media).is_err() {
+                break;
+            }
+        }
+    });
+
+    // Run blocking code on a seperate thread
+    // This is not an async thread
+    let name = name.to_string();
+    std::thread::spawn(move || {
+        let mut aud_ts = 0u32;
+        let mut vid_ts = 0u32;
+        let mut pools = Default::default();
+        let mut live = false;
+        let (keyframe, audio_frame) = stand_in;
+
+        // GStreamer only answers DESCRIBE, and again PLAY after its flushing seek, once every
+        // stream has carried data through parser and decoder, so audio is fed with silence
+        // that keeps pace with the stand-in keyframes until the camera is live
+        let silence = audio_frame.as_ref().and_then(silent_aac).or(audio_frame);
+        let primers = keyframe
+            .iter()
+            .cloned()
+            .chain(std::iter::repeat_n(silence.clone(), AUDIO_PRIMING_FRAMES).flatten());
+        for media in primers {
+            send_to_sources(
+                media,
+                &mut pools,
+                &vid_src,
+                &aud_src,
+                &mut vid_ts,
+                &mut aud_ts,
+                &stream_config,
+            )?;
+        }
+
+        log::trace!("{name}::{stream}: Sending frames");
+        loop {
+            let data = match frame_rx.recv_timeout(KEYFRAME_FILL_INTERVAL) {
+                Ok(data) => {
+                    if !live {
+                        live = true;
+                        // Keep audio in step with the video time spent on stand-in keyframes
+                        aud_ts = vid_ts;
+                    }
+                    data
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => match (&keyframe, live) {
+                    (Some(keyframe), false) => {
+                        // Stand-ins go out every KEYFRAME_FILL_INTERVAL; stamping them one frame
+                        // apart would fall behind the clock and get dropped as late
+                        vid_ts += (KEYFRAME_FILL_INTERVAL.as_micros() as u32)
+                            .saturating_sub(1_000_000 / stream_config.fps.max(1));
+                        if let Some(silence) = &silence {
+                            while aud_ts < vid_ts {
+                                send_to_sources(
+                                    silence.clone(),
+                                    &mut pools,
+                                    &vid_src,
+                                    &aud_src,
+                                    &mut vid_ts,
+                                    &mut aud_ts,
+                                    &stream_config,
+                                )?;
+                            }
+                        }
+                        keyframe.clone()
+                    }
+                    _ => continue,
+                },
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            };
+            let r = send_to_sources(
+                data,
+                &mut pools,
+                &vid_src,
+                &aud_src,
+                &mut vid_ts,
+                &mut aud_ts,
+                &stream_config,
+            );
+            if let Err(r) = &r {
+                log::info!("Failed to send to source: {r:?}");
+            }
+            r?;
+        }
+        log::trace!("All media recieved");
+        AnyResult::Ok(())
+    });
+    Ok(())
 }
 
 fn send_to_sources(

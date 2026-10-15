@@ -22,10 +22,10 @@
 //!
 //! Neolink source code is available online at <https://github.com/QuantumEntangledAndy/neolink>
 //!
-#[cfg(not(target_env = "msvc"))]
+#[cfg(not(windows))]
 use tikv_jemallocator::Jemalloc;
 
-#[cfg(not(target_env = "msvc"))]
+#[cfg(not(windows))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 

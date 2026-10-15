@@ -26,6 +26,13 @@ First release of this fork, based on upstream commit `6e05e78` (`0.6.3-rc.3`).
   being silently dropped.
 - A stream whose RTSP client gave up during setup is no longer pumped into
   GStreamer, so it no longer keeps a battery camera awake.
+- Clients with short timeouts, such as Home Assistant (5 s), can now open the
+  stream of a sleeping battery or 4G camera. Neolink learns the stream type at
+  start-up and answers at once, showing the last keyframe and silent audio while
+  the camera wakes up (about 10 s through the Reolink relay), then switches to
+  live frames.
+- Windows builds no longer try to compile jemalloc, which only works outside
+  Windows.
 
 ### Changed
 
