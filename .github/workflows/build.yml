@@ -43,28 +43,22 @@ jobs:
           sudo aptitude install -y libgstrtspserver-1.0-dev libgstreamer1.0-dev libgtk2.0-dev protobuf-compiler libssl-dev
       - if: runner.os == 'Windows'
         name: Install Windows deps
-        shell: pwsh
-        run: |
-          choco install -y --no-progress gstreamer --version=1.26.9
-          choco install -y --no-progress gstreamer-devel --version=1.26.9
-          choco install -y --no-progress protoc --version=36.2.0
-          choco install -y --no-progress openssl --version=3.6.2
-
-          # The installers record their location machine-wide, which the current shell does not see yet
-          $gst = [Environment]::GetEnvironmentVariable('GSTREAMER_1_0_ROOT_MSVC_X86_64', 'Machine')
-          if (-not $gst) {
-            $gst = @("$env:ProgramFiles\gstreamer\1.0\msvc_x86_64\", "C:\gstreamer\1.0\msvc_x86_64\", "D:\gstreamer\1.0\msvc_x86_64\") |
-              Where-Object { Test-Path $_ -PathType Container } | Select-Object -First 1
-          }
-          $ssl = @("$env:ProgramFiles\OpenSSL-Win64\", "$env:ProgramFiles\OpenSSL\", "D:\Program Files\OpenSSL-Win64\", "D:\Program Files\OpenSSL\") |
-            Where-Object { Test-Path $_ -PathType Container } | Select-Object -First 1
-          if (-not $gst -or -not $ssl) { throw "GStreamer ($gst) or OpenSSL ($ssl) not found" }
-          echo "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst"
-          echo "OPENSSL_DIR=$ssl"
-
-          Add-Content -Path $env:GITHUB_ENV -Value "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst"
-          Add-Content -Path $env:GITHUB_PATH -Value "$gst\bin"
-          Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_DIR=$ssl"
+        # gstreamer.freedesktop.org does not serve its Windows installers reliably, so take everything from MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          path-type: minimal
+          install: >-
+            mingw-w64-x86_64-rust
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-protobuf
+            mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-gstreamer
+            mingw-w64-x86_64-gst-plugins-base
+            mingw-w64-x86_64-gst-plugins-good
+            mingw-w64-x86_64-gst-plugins-bad
+            mingw-w64-x86_64-gst-rtsp-server
       - if: runner.os == 'macOS'
         name: Install macOS deps
         run: |
@@ -89,14 +83,17 @@ jobs:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
+        if: runner.os != 'Windows'
         shell: bash
         run: |
-          echo "PATH=${PATH}"
-          echo "GSTREAMER_1_0_ROOT_MSVC_X86_64=${GSTREAMER_1_0_ROOT_MSVC_X86_64}"
-          echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
-          # pkg-config --variable pc_path pkg-config
           export JEMALLOC_SYS_WITH_LG_PAGE=16
-          cargo  build --release --all-features
+          cargo build --release --all-features
+      - name: Build (Windows, MSYS2 MinGW64)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          cargo --version
+          cargo build --release --all-features
       - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.os }}

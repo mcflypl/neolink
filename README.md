@@ -53,9 +53,12 @@ and extract the zip.
 
 Install the latest [gstreamer](https://gstreamer.freedesktop.org/download/).
 
-- **Windows**: ensure you install `full` when prompted in the MSI options.
-- **Mac**: Install the `.pkg` installer from the official gstreamer website over
-  the brew version
+- **Windows**: the Windows build is compiled with [MSYS2](https://www.msys2.org/)
+  MinGW64, so install GStreamer from its MINGW64 shell and run neolink there:
+  `pacman -S mingw-w64-x86_64-gst-plugins-good mingw-w64-x86_64-gst-plugins-bad
+  mingw-w64-x86_64-gst-rtsp-server mingw-w64-x86_64-openssl`
+- **Mac**: the macOS build links against Homebrew, so install
+  `brew install gstreamer openssl@3`
 - **Ubuntu/Debian**: These packages should work
 
 ```bash
@@ -70,11 +73,6 @@ sudo apt install \
   libssl3
 ```
 
-- **Windows**: You may also need to
-  [install openssl](https://wiki.openssl.org/index.php/Binaries)
-- **Macos**: You may also need to
-  [install openssl](https://wiki.openssl.org/index.php/Binaries) or
-  `brew install openssl@1.1`
 - **Ubuntu/Debian**: Install the `libssl3` package
 
 Then create a config file as described below.
