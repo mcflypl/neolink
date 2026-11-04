@@ -77,6 +77,22 @@ impl NeoInstance {
         self.run_passive_task(task).await
     }
 
+    /// Runs the task with [`Self::run_task`] when `wake` is set, otherwise with
+    /// [`Self::run_passive_task`]
+    pub(crate) async fn run_task_waking<F, T>(&self, wake: bool, task: F) -> AnyResult<T>
+    where
+        F: for<'a> Fn(
+            &'a BcCamera,
+        )
+            -> std::pin::Pin<Box<dyn futures::Future<Output = AnyResult<T>> + Send + 'a>>,
+    {
+        if wake {
+            self.run_task(task).await
+        } else {
+            self.run_passive_task(task).await
+        }
+    }
+
     /// This is a helpful convience function
     ///
     /// Given an async task it will:

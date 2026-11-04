@@ -274,7 +274,7 @@ Status Messages:
   and `off` for still, only published when `enable_motion` is true in the config
 - `/status/ptz/preset` Sent in reply to a `/query/ptz/preset` an XML encoded
   version of the PTZ presets
-- `/status/preview` a base64 encoded camera image updated every 2s. Not
+- `/status/preview` a base64 encoded camera image updated every 2s by default. Not
   every camera supports the snapshot command needed for this. In such cases
   there will be no `/status/preview` message. Only published when
   `enable_preview` is true in the config
@@ -369,7 +369,17 @@ battery_update = 2000        # Number of ms between `/status/battery_level` upda
 preview_update = 2000        # Number of ms between `/status/preview` updates
                              #
 floodlight_update = 2000     # Number of ms between `/status/floodlight_tasks` updates
+                             #
+wake_for_updates = false     # Wake the camera for the battery and preview
+                             # updates
 ```
+
+The battery and preview updates only run while the camera is connected for
+another reason, such as an RTSP client. With `idle_disconnect = true` a sleeping
+camera therefore never reports them. Setting `wake_for_updates = true` makes
+each update wake the camera, which then goes back to sleep 30s later. Keep
+`battery_update` and `preview_update` long in that case (e.g. `3600000` for one
+hour), since every wake costs battery and, on cellular cameras, data.
 
 #### MQTT Discovery
 

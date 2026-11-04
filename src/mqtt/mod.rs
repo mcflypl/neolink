@@ -477,7 +477,7 @@ async fn listen_on_camera(camera: NeoInstance, mqtt_instance: MqttInstance) -> R
                         });
                         let v = async {
                             while wait.next().await.is_some() {
-                                let image = camera_snap.run_passive_task(|cam| {
+                                let image = camera_snap.run_task_waking(config.wake_for_updates, |cam| {
                                     Box::pin(async move {
                                         let image = cam.get_snapshot().await?;
                                         AnyResult::Ok(image)
@@ -521,7 +521,7 @@ async fn listen_on_camera(camera: NeoInstance, mqtt_instance: MqttInstance) -> R
 
                         let v = async {
                             while wait.next().await.is_some() {
-                                let xml = camera_battery.run_passive_task(|cam| {
+                                let xml = camera_battery.run_task_waking(config.wake_for_updates, |cam| {
                                     Box::pin(async move {
                                         let xml = cam.battery_info().await?;
                                         AnyResult::Ok(xml)

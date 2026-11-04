@@ -258,6 +258,10 @@ pub(crate) struct MqttConfig {
     ))]
     #[serde(default = "default_2000")]
     pub(crate) preview_update: u64,
+    /// Wake a disconnected camera for the battery and preview updates
+    /// instead of waiting until something else connects it
+    #[serde(default = "default_false")]
+    pub(crate) wake_for_updates: bool,
 
     /// Enable the flood light tasks status
     /// Will not do anything if no floodlight
@@ -310,6 +314,7 @@ fn default_mqtt() -> MqttConfig {
         battery_update: 2000,
         enable_preview: true,
         preview_update: 2000,
+        wake_for_updates: false,
         enable_floodlight: true,
         floodlight_update: 2000,
         discovery: Default::default(),

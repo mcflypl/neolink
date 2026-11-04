@@ -11,6 +11,15 @@ their history lives in that repository.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-04
+
+### Added
+
+- `wake_for_updates` in `[cameras.mqtt]`: the periodic battery and preview
+  updates wake an idle camera instead of waiting until something else connects
+  it, so a sleeping battery camera can report every `battery_update` /
+  `preview_update` ms.
+
 ## [0.8.0] - 2026-10-15
 
 ### Changed
@@ -86,6 +95,7 @@ First release of this fork, based on upstream commit `6e05e78` (`0.6.3-rc.3`).
 - Donation links and `FUNDING.yml`.
 - markdownlint pre-commit hook and its configuration.
 
-[Unreleased]: https://github.com/mcflypl/neolink/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/mcflypl/neolink/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/mcflypl/neolink/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mcflypl/neolink/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mcflypl/neolink/compare/6e05e78...v0.7.0
